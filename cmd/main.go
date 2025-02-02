@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
@@ -86,9 +89,26 @@ func main() {
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	logrus.Infof("Swagger UI available at /swagger/index.html")
 
-	if err := server.Run(port, router); err != nil {
-		logrus.Fatalf("Error occurred while running HTTP server: %s", err.Error())
+	go func() {
+		if err := server.Run(port, router); err != nil {
+			logrus.Fatalf("Error occurred while running HTTP server: %s", err.Error())
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	<-quit
+
+	logrus.Infof("Application Shutting Down")
+
+	if err := server.Shutdown(context.Background()); err != nil {
+		logrus.Fatalf("error occured on server shutting down: %s", err.Error())
 	}
+
+	if err := db.Close(); err != nil {
+		logrus.Fatalf("error occured on db connection close: %s", err.Error())
+	}
+
 }
 
 func initConfig() error {
